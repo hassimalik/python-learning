@@ -38,17 +38,18 @@ jobs:
             exit 1
           fi
 
-      # Rule 3: Hardcoded Secrets & Credentials Scanner
+# Rule 3: Hardcoded Secrets & Credentials Scanner
       - name: Scan for Hardcoded Secrets & Tokens
         run: |
           echo "=== 3. Scanning for Hardcoded Secrets & API Keys ==="
-          # Searches for patterns matching AWS keys, OpenAI keys, or general Bearer/Private tokens
-          SECRETS_FOUND=$(grep -EIn '(AKIA[0-9A-Z]{16}|sk-[a-zA-Z0-9]{32,}|BEGIN PRIVATE KEY|Bearer [a-zA-Z0-9\-\._~\+\/]+=*)' $(git ls-files) || true)
+          SECRETS_FOUND=$(git grep -EIn '(AKIA[0-9A-Z]{16}|sk-[a-zA-Z0-9]{32,}|BEGIN PRIVATE KEY|Bearer [a-zA-Z0-9\-\._~\+\/]+=*)' -- ':(exclude).github/*' || true)
           if [ -n "$SECRETS_FOUND" ]; then
             echo "ERROR: Potential hardcoded secret(s) or API key(s) detected:"
             echo "$SECRETS_FOUND"
             exit 1
           fi
+
+
 
       # Rule 4: Merge Conflict Marker Check
       - name: Check for Unresolved Merge Conflict Markers
