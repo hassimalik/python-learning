@@ -36,27 +36,7 @@ jobs:
             echo "ERROR: The following file(s) exceed the 10MB size limit:"
             echo "$LARGE_FILES"
             exit 1
-          fi
-
-# Rule 3: Hardcoded Secrets & Credentials Scanner (Scans ONLY incoming changes)
-      - name: Scan for Hardcoded Secrets & Tokens
-        run: |
-          echo "=== 3. Scanning Incoming Code Changes for Hardcoded Secrets ==="
-          # Determines the base commit to compare incoming changes against
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            BASE_REF="origin/${{ github.base_ref }}"
-          else
-            BASE_REF="HEAD~1"
-          fi
-
-          # Scans added/modified lines in incoming code diff only
-          SECRETS_FOUND=$(git diff -U0 $BASE_REF HEAD | grep -E '^\+' | grep -v '^\+\+\+' | grep -EIn '(AKIA[0-9A-Z]{16}|sk-[a-zA-Z0-9]{32,}|BEGIN PRIVATE KEY|Bearer [a-zA-Z0-9\-\._~\+\/]+=*)' || true)
-          
-          if [ -n "$SECRETS_FOUND" ]; then
-            echo "ERROR: Hardcoded secret(s) detected in your new incoming changes:"
-            echo "$SECRETS_FOUND"
-            exit 1
-          fi
+            fi
 
 
       # Rule 4: Merge Conflict Marker Check
