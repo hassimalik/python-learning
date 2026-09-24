@@ -1,0 +1,109 @@
+name: Fast & Secure Python CI/CD
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  ci-checks:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Fetches full history to analyze git diffs
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      # Rule 1: Python Syntax Verification (compileall)
+      - name: Check Python Syntax Errors
+        run: |
+          echo "=== 1. Checking Python Syntax with compileall ==="
+          python -m compileall -q .
+
+      # Rule 2: Max File Size Guard (>10MB)
+      - name: Check Max File Size Limits
+        run: |
+          echo "=== 2. Checking for Files Exceeding 10MB ==="
+          LARGE_FILES=$(find . -type f -not -path '*/.*' -size +10M)
+          if [ -n "$LARGE_FILES" ]; then
+            echo "ERROR: The following file(s) exceed the 10MB size limit:"
+            echo "$LARGE_FILES"
+            exit 1
+          fi
+
+      # Rule 3: Hardcoded Secrets & Credentials Scanner
+      - name: Scan for Hardcoded Secrets & Tokens
+        run: |
+          echo "=== 3. Scanning for Hardcoded Secrets & API Keys ==="
+          # Searches for patterns matching AWS keys, OpenAI keys, or general Bearer/Private tokens
+          SECRETS_FOUND=$(grep -EIn '(AKIA[0-9A-Z]{16}|sk-[a-zA-Z0-9]{32,}|BEGIN PRIVATE KEY|Bearer [a-zA-Z0-9\-\._~\+\/]+=*)' $(git ls-files) || true)
+          if [ -n "$SECRETS_FOUND" ]; then
+            echo "ERROR: Potential hardcoded secret(s) or API key(s) detected:"
+            echo "$SECRETS_FOUND"
+            exit 1
+          fi
+
+      # Rule 4: Merge Conflict Marker Check
+      - name: Check for Unresolved Merge Conflict Markers
+        run: |
+          echo "=== 4. Checking for Unresolved Merge Conflict Markers ==="
+          CONFLICT_MARKERS=$(grep -EIn '^(<<<<<<<|=======|>>>>>>>)' $(git ls-files) || true)
+          if [ -n "$CONFLICT_MARKERS" ]; then
+            echo "ERROR: Leftover merge conflict markers detected:"
+            echo "$CONFLICT_MARKERS"
+            exit 1
+          fi
+
+      # Rule 5: Check for .env Files
+      - name: Check for .env Files
+        run: |
+          echo "=== 5. Checking for Tracked .env Files ==="
+          ENV_FILES=$(git ls-files | grep -E '(^|/)\.env($|\..*)' || true)
+          if [ -n "$ENV_FILES" ]; then
+            echo "ERROR: Tracked .env file(s) detected:"
+            echo "$ENV_FILES"
+            exit 1
+          fi
+
+      # Rule 6: Ensure Critical Files Are Not Deleted
+      - name: Check for Deleted Critical Files
+        run: |
+          echo "=== 6. Checking for Deleted Critical Files ==="
+          CRITICAL_FILES=("readme.md" "README.md" "requirements.txt")
+          DELETED_FILES=$(git diff --name-only --diff-filter=D HEAD~1 HEAD 2>/dev/null || true)
+          for file in "${CRITICAL_FILES[@]}"; do
+            if echo "$DELETED_FILES" | grep -qx "$file"; then
+              echo "ERROR: Critical file '$file' was deleted!"
+              exit 1
+            fi
+          done
+
+      # Rule 7: Forbidden Dangerous Functions Check
+      - name: Check for Forbidden Functions
+        run: |
+          echo "=== 7. Scanning for eval() and exec() Calls ==="
+          FORBIDDEN=$(grep -En '\b(eval|exec)\s*\(' $(git ls-files '*.py') || true)
+          if [ -n "$FORBIDDEN" ]; then
+            echo "ERROR: Dangerous function(s) detected:"
+            echo "$FORBIDDEN"
+            exit 1
+          fi
+
+      # Rule 8: Dependency Vulnerability Audit
+      - name: Audit Dependencies for Vulnerabilities
+        run: |
+          echo "=== 8. Auditing Python Dependencies ==="
+          if [ -f requirements.txt ]; then
+            python -m pip install --upgrade pip
+            pip install pip-audit
+            pip-audit -r requirements.txt
+          else
+            echo "No requirements.txt found, skipping audit."
+          fi
